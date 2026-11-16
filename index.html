@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Расходы 2027</title>
+<style>
+/* Палитра: глубокий синий, бирюзовый для доходов, коралловый для расходов. Раскладка: одна колонка, крупные кнопки под большой палец. */
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1c2733;--mute:#6b7785;--line:#dfe4ea;--acc:#1f3a5f;--acc-ink:#fff;--inc:#1d8f82;--exp:#d9583b;--ok:#2e7d32;--bad:#c0392b;--chip:#eaeff5}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10161d;--card:#18212b;--ink:#e8edf2;--mute:#93a0ae;--line:#2a3541;--acc:#7fa8dc;--acc-ink:#10161d;--inc:#3cc0b0;--exp:#f08a70;--ok:#6fcf74;--bad:#ff8a7a;--chip:#232e3a}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding:16px;max-width:520px;margin:0 auto}
+h1{font-size:22px;margin:4px 0 14px;display:flex;justify-content:space-between;align-items:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
+.seg button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:10px 4px;font:600 13px/1.2 inherit;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.seg button[data-type="inc"][aria-pressed="true"]{background:var(--inc);border-color:var(--inc);color:#fff}
+label{display:block;font-size:13px;color:var(--mute);margin:12px 0 5px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chips button{border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:999px;padding:9px 13px;font-size:15px;cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+input[type=text],input[type=date],input[type=url],input[type=password],input[inputmode=decimal]{width:100%;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:12px;font-size:17px}
+#amount{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.go{width:100%;margin-top:16px;border:0;border-radius:12px;padding:15px;font-size:18px;font-weight:700;background:var(--exp);color:#fff;cursor:pointer}
+.go.inc{background:var(--inc)}
+.go:disabled{opacity:.6}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+#msg{min-height:22px;margin-top:10px;font-size:15px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.hist{list-style:none;margin:0;padding:0}
+.hist li{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.hist li:first-child{border-top:0}
+.hist .amt{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.hist .sub{color:var(--mute);font-size:12.5px}
+.pill{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--chip)}
+.pill.wait{background:#ffe9b8;color:#6b4b00}
+details summary{cursor:pointer;font-weight:600}
+.small{font-size:13px;color:var(--mute);margin:8px 0 0}
+.btn2{border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:10px;padding:10px 14px;font-size:15px;cursor:pointer;margin-top:10px;margin-right:8px}
+</style>
+</head>
+<body>
+<h1><span>Расходы 2027</span><span class="pill" id="queueBadge" hidden></span></h1>
+
+<div class="seg" role="group" aria-label="Тип записи">
+  <button type="button" data-type="day" aria-pressed="true">Повседневные</button>
+  <button type="button" data-type="per" aria-pressed="false">Переменные</button>
+  <button type="button" data-type="man" aria-pressed="false">Обязательные</button>
+  <button type="button" data-type="inc" aria-pressed="false">Доходы</button>
+</div>
+
+<div class="card">
+  <label style="margin-top:0">Категория</label>
+  <div class="chips" id="chips"></div>
+
+  <label for="amount">Сумма, руб.</label>
+  <input id="amount" type="text" inputmode="decimal" placeholder="0" autocomplete="off">
+
+  <div class="row">
+    <div><label for="date">Дата</label><input id="date" type="date"></div>
+    <div><label for="note" id="noteLabel">Комментарий</label><input id="note" type="text" placeholder="необязательно" autocomplete="off"></div>
+  </div>
+
+  <button class="go" id="go" type="button">Добавить</button>
+  <div id="msg" role="status" aria-live="polite"></div>
+</div>
+
+<div class="card">
+  <strong>Последние записи</strong>
+  <ul class="hist" id="hist"></ul>
+  <p class="small" id="histEmpty">Пока пусто. Исправить или удалить запись можно прямо в таблице.</p>
+  <button class="btn2" id="retry" type="button" hidden>Отправить ожидающие</button>
+</div>
+
+<div class="card">
+  <details id="settings">
+    <summary>Настройки подключения</summary>
+    <label for="url">Адрес скрипта (из Google Таблиц, оканчивается на /exec)</label>
+    <input id="url" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+    <label for="token">Пароль (тот же, что в скрипте)</label>
+    <input id="token" type="password" autocomplete="off">
+    <button class="btn2" id="save" type="button">Сохранить</button>
+    <button class="btn2" id="test" type="button">Проверить связь</button>
+    <p class="small" id="setMsg"></p>
+  </details>
+</div>
+
+<script>
+var CATS={
+  day:["Питание","Транспорт","Здоровье и красота","Развлечения","Развлечения/вредное","Регулярные","Праздники/подарки","Одежда","Спорт","Прочее","Обучение / психотерапия","Костя"],
+  per:["Путешествия","Покупки > 10 к","Покупки","Красота и здоровье","Стоматология","Ремонт, мебель","Мелкий ремонт","Автомобиль","Другое","Накопления"],
+  man:["Ипотека","ЖКХ","Налоги","Образование","Платеж по кредитам","Прочее"],
+  inc:["Зарплата","Премия и бонусы","Аренда","% по вкладам","Прочее"]
+};
+var TYPE_NAME={day:"Повседневные",per:"Переменные",man:"Обязательные",inc:"Доходы"};
+var state={type:"day",cat:null};
+var $=function(id){return document.getElementById(id)};
+function store(k,v){try{if(v===undefined){return localStorage.getItem(k)}localStorage.setItem(k,v)}catch(e){return null}}
+var mem={};
+function getJ(k,def){try{var s=store(k);return s?JSON.parse(s):def}catch(e){return mem[k]||def}}
+function setJ(k,v){mem[k]=v;store(k,JSON.stringify(v))}
+
+function today(){var d=new Date();var m=("0"+(d.getMonth()+1)).slice(-2),dd=("0"+d.getDate()).slice(-2);return d.getFullYear()+"-"+m+"-"+dd}
+function fmt(n){return Number(n).toLocaleString("ru-RU",{maximumFractionDigits:2})}
+function fmtDate(s){var p=s.split("-");return p[2]+"."+p[1]}
+function say(t,cls){var m=$("msg");m.textContent=t;m.className=cls||""}
+
+function renderChips(){
+  var box=$("chips");box.innerHTML="";
+  CATS[state.type].forEach(function(c){
+    var b=document.createElement("button");b.type="button";b.textContent=c;
+    b.setAttribute("aria-pressed",state.cat===c?"true":"false");
+    b.onclick=function(){state.cat=c;renderChips()};
+    box.appendChild(b);
+  });
+}
+function setType(t){
+  state.type=t;state.cat=null;
+  document.querySelectorAll(".seg button").forEach(function(b){b.setAttribute("aria-pressed",b.dataset.type===t?"true":"false")});
+  $("noteLabel").textContent=(t==="per"||t==="man")?"Описание":"Комментарий";
+  $("go").className="go"+(t==="inc"?" inc":"");
+  $("go").textContent=t==="inc"?"Добавить доход":"Добавить расход";
+  renderChips();say("");
+}
+document.querySelectorAll(".seg button").forEach(function(b){b.onclick=function(){setType(b.dataset.type)}});
+
+function cfg(){return {url:(store("sc_url")||"").trim(),token:store("sc_token")||""}}
+
+function post(entry){
+  var c=cfg();
+  if(!c.url){return Promise.reject({soft:true,msg:"Сначала укажите адрес скрипта в настройках."})}
+  var body=JSON.stringify({token:c.token,type:entry.type,date:entry.date,cat:entry.cat,amount:entry.amount,note:entry.note});
+  return fetch(c.url,{method:"POST",body:body}).then(function(r){return r.json()}).then(function(j){
+    if(!j.ok){throw {server:true,msg:j.error||"Ошибка скрипта"}}
+    return j;
+  });
+}
+
+function queue(){return getJ("sc_queue",[])}
+function history(){return getJ("sc_hist",[])}
+function renderHist(){
+  var q=queue(),h=history();
+  var all=q.map(function(e){return {e:e,wait:true}}).concat(h.map(function(e){return {e:e,wait:false}})).slice(0,15);
+  var ul=$("hist");ul.innerHTML="";
+  all.forEach(function(x){
+    var li=document.createElement("li");
+    var l=document.createElement("div");
+    l.innerHTML="";
+    var t=document.createElement("div");t.textContent=x.e.cat+(x.e.note?" · "+x.e.note:"");
+    var s=document.createElement("div");s.className="sub";s.textContent=fmtDate(x.e.date)+" · "+TYPE_NAME[x.e.type]+(x.wait?" · ждёт отправки":" · в таблице");
+    l.appendChild(t);l.appendChild(s);
+    var a=document.createElement("div");a.className="amt";a.textContent=(x.e.type==="inc"?"+":"−")+fmt(x.e.amount);
+    a.style.color=x.e.type==="inc"?"var(--inc)":"var(--exp)";
+    li.appendChild(l);li.appendChild(a);ul.appendChild(li);
+  });
+  $("histEmpty").hidden=all.length>0;
+  var b=$("queueBadge");b.hidden=q.length===0;b.className="pill wait";b.textContent="ждут отправки: "+q.length;
+  $("retry").hidden=q.length===0;
+}
+
+function addHist(e){var h=history();h.unshift(e);setJ("sc_hist",h.slice(0,30))}
+
+function submit(){
+  var amt=parseFloat(String($("amount").value).replace(/\s/g,"").replace(",","."));
+  if(!state.cat){say("Выберите категорию.","bad");return}
+  if(!(amt>0)){say("Введите сумму больше нуля.","bad");$("amount").focus();return}
+  var date=$("date").value||today();
+  var e={type:state.type,date:date,cat:state.cat,amount:amt,note:$("note").value.trim()};
+  $("go").disabled=true;say("Отправляю…");
+  post(e).then(function(j){
+    addHist(e);say("Записано: лист «"+j.sheet+"», строка "+j.row+".","ok");
+    $("amount").value="";$("note").value="";renderHist();
+  }).catch(function(err){
+    if(err&&err.server||err&&err.soft){say(err.msg,"bad");return}
+    var q=queue();q.unshift(e);setJ("sc_queue",q);
+    say("Нет связи. Запись сохранена на телефоне и уйдёт позже.","bad");
+    $("amount").value="";$("note").value="";renderHist();
+  }).then(function(){$("go").disabled=false});
+}
+$("go").onclick=submit;
+$("amount").addEventListener("keydown",function(ev){if(ev.key==="Enter")submit()});
+
+function flush(){
+  var q=queue();if(!q.length)return Promise.resolve();
+  var left=[],chain=Promise.resolve();
+  q.slice().reverse().forEach(function(e){
+    chain=chain.then(function(){
+      return post(e).then(function(){addHist(e)}).catch(function(){left.unshift(e)});
+    });
+  });
+  return chain.then(function(){setJ("sc_queue",left);renderHist();
+    if(!left.length){say("Все ожидающие записи отправлены.","ok")}});
+}
+$("retry").onclick=function(){say("Отправляю…");flush()};
+
+$("save").onclick=function(){store("sc_url",$("url").value.trim());store("sc_token",$("token").value);$("setMsg").textContent="Сохранено на этом устройстве."};
+$("test").onclick=function(){
+  var u=$("url").value.trim();if(!u){$("setMsg").textContent="Введите адрес скрипта.";return}
+  $("setMsg").textContent="Проверяю…";
+  fetch(u).then(function(r){return r.json()}).then(function(j){$("setMsg").textContent=j.ok?"Связь есть: "+j.msg:"Ответ скрипта: "+(j.error||"ошибка")})
+  .catch(function(){$("setMsg").textContent="Скрипт не отвечает. Проверьте адрес и что доступ открыт для «Всех»."});
+};
+
+$("date").value=today();$("url").value=store("sc_url")||"";$("token").value=store("sc_token")||"";
+if(!store("sc_url")){$("settings").open=true}
+setType("day");renderHist();flush();
+window.addEventListener("online",flush);
+</script>
+</body>
+</html>
